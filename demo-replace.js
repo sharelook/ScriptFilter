@@ -86,7 +86,7 @@ function testFilterResponse(args) {
             }
 
             var header = chunk.substr(0, offset);
-            var body = chunk.substr(offset, length).replace(/Baiduspider/, 'badxxxxx!!!');
+            var body = chunk.substr(offset, length).replace(/Disallow/g, 'Allow');
 
             if (this.chunked) {
                 var size = body.length.toString(16);
@@ -131,7 +131,7 @@ function testFilterResponse(args) {
 function scriptFilterExecute(args) {
     console.log('filter ' + args.uuid);
     console.log('url ' + args.url);
-    if (args.url.indexOf('https://www.baidu.com/robots.txt') === 0) {
+    if (args.url.indexOf('baidu.com/robots.txt') !== -1) {
         var result = testFilterResponse(args);
         if (result.chunk) {
             return result.chunk;
@@ -145,7 +145,7 @@ function scriptFilterExecute(args) {
  * Release filter values.
  * @param {string}: http request UUID
  */
-function scriptFilterFree(id) {
-    console.log('free ' + id);
-    delete localStorage[id];
+function scriptFilterFree(uuid) {
+    console.log('free ' + uuid);
+    delete localStorage[uuid];
 }

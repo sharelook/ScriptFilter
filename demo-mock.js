@@ -38,7 +38,7 @@ function scriptFilterExecute(args) {
  * Release filter values.
  * @param {string}: http request UUID
  */
-function scriptFilterFree(id) {
-    console.log('free ' + id);
-    delete localStorage[id];
+function scriptFilterFree(uuid) {
+    console.log('free ' + uuid);
+    delete localStorage[uuid];
 }
