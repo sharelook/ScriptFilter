@@ -43,10 +43,18 @@ function testFilterResponse(args) {
         }
     } else {
         parser.onHeadersComplete = function(info) {
-            var headers = ['HTTP/' + info.versionMajor + '.' + info.versionMinor + ' ' + info.statusCode + ' ' + info.statusMessage];
+            var response_line = 'HTTP/' + info.versionMajor + '.' + info.versionMinor + ' ' + info.statusCode;
+            if (info.statusMessage) {
+                response_line += ' ' + info.statusMessage;
+            }
+
+            this.chunked = false;
+
+            var headers = [response_line];
             for (var i = 0; i < info.headers.length; i += 2) {
                 var key = info.headers[i].toLowerCase();
-                if (key == 'content-length') {
+                if (key === 'content-length' || key === 'transfer-encoding') {
+                    this.chunked = true;
                     headers.push('Transfer-Encoding: chunked');
                 } else {
                     var value = info.headers[i + 1];
@@ -55,27 +63,51 @@ function testFilterResponse(args) {
             }
 
             var header = headers.join('\r\n') + '\r\n\r\n';
+
             if (this.offset < this.end) {
                 this.chunk = header + this.chunk.substring(this.offset, this.end);
             } else {
                 this.chunk = header;
             }
+
             this.end = this.chunk.length;
             this.offset = header.length;
         }
 
         parser.onBody = function(chunk, offset, length) {
             /* TODO: stream replace */
-            var body = this.chunk.substr(offset, length).replace(/Baiduspider/, 'badxxxxx!!!');
-            var size = body.length.toString(16);
-            var header = this.chunk.substr(0, offset);
-            this.chunk = header + size + '\r\n' + body + '\r\n';
-            this.offset = offset + size.length + 4 + body.length;
-            this.end = this.chunk.length;
+            var extra = chunk.substring(offset + length + (this.isChunked ? 2 : 0)) || "";
+
+            if (this.isChunked) {
+                var size = length.toString(16).length + 2;
+                chunk = chunk.substr(0, offset - size) + chunk.substring(offset, this.end);
+                offset -= size;
+                this.end -= size;
+            }
+
+            var header = chunk.substr(0, offset);
+            var body = chunk.substr(offset, length).replace(/Baiduspider/, 'badxxxxx!!!');
+
+            if (this.chunked) {
+                var size = body.length.toString(16);
+                chunk = header + size + '\r\n' + body + '\r\n' + extra;
+                this.offset = offset + size.length + 4 + body.length;
+                if (this.isChunked) {
+                    this.body_bytes = body.length;
+                }
+            } else {
+                chunk = header + body + extra;
+                this.offset = offset + body.length;
+            }
+
+            this.chunk = chunk;
+            this.end = chunk.length;
         };
 
         parser.onMessageComplete = function(info) {
-            this.chunk += '0\r\n\r\n';
+            if (this.chunked) {
+                this.chunk += '0\r\n\r\n';
+            }
         }
     }
 

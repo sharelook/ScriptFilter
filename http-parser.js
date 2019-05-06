@@ -138,10 +138,10 @@ HTTPParser.prototype.execute = function(chunk, start, length) {
 
     this.chunk = chunk;
     this.offset = start;
+    this.end = start + length;
 
-    var end = this.end = start + length;
     try {
-        while (this.offset < end) {
+        while (this.offset < this.end) {
             if (this[this.state]()) {
                 break;
             }
