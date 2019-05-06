@@ -59,15 +59,13 @@ function jsPrint() {
     }
 }
 
-if (typeof console === 'undefined') {
-    var console = {
-        log: jsPrint,
-        info: jsPrint,
-        error: jsPrint,
-        debug: jsPrint,
-        warn: jsPrint
-    };
-}
+var console = {
+    log: jsPrint,
+    info: jsPrint,
+    error: jsPrint,
+    debug: jsPrint,
+    warn: jsPrint
+};
 
 function HTTPParser(type) {
     if (!(this instanceof HTTPParser)) {
@@ -85,7 +83,6 @@ function HTTPParser(type) {
     this.connection = '';
     this.headerSize = 0; // for preventing too big headers
     this.body_bytes = null;
-    this.isUserCall = false;
     this.hadError = false;
 }
 
@@ -103,15 +100,6 @@ HTTPParser.prototype[kOnHeaders] =
     HTTPParser.prototype[kOnBody] =
     HTTPParser.prototype[kOnMessageComplete] = function() {};
 
-var compatMode0_12 = true;
-Object.defineProperty(HTTPParser, 'kOnExecute', {
-    get: function() {
-        // hack for backward compatibility
-        compatMode0_12 = false;
-        return 4;
-    }
-});
-
 HTTPParser.prototype.reinitialize = HTTPParser;
 HTTPParser.prototype.close =
     HTTPParser.prototype.pause =
@@ -126,6 +114,7 @@ var headerState = {
     RESPONSE_LINE: true,
     HEADER: true
 };
+
 HTTPParser.prototype.execute = function(chunk, start, length) {
     if (!(this instanceof HTTPParser)) {
         throw new TypeError('not a HTTPParser');
@@ -182,6 +171,7 @@ var stateFinishAllowed = {
     RESPONSE_LINE: true,
     BODY_RAW: true
 };
+
 HTTPParser.prototype.finish = function() {
     if (this.hadError) {
         return;
@@ -190,30 +180,16 @@ HTTPParser.prototype.finish = function() {
         return new Error('invalid state for EOF');
     }
     if (this.state === 'BODY_RAW') {
-        this.userCall()(this[kOnMessageComplete]());
+        this[kOnMessageComplete]();
     }
 };
 
 // These three methods are used for an internal speed optimization, and it also
 // works if theses are noops. Basically consume() asks us to read the bytes
 // ourselves, but if we don't do it we get them through execute().
-HTTPParser.prototype.consume =
-    HTTPParser.prototype.unconsume =
-    HTTPParser.prototype.getCurrentBuffer = function() {};
-
-//For correct error handling - see HTTPParser#execute
-//Usage: this.userCall()(userFunction('arg'));
-HTTPParser.prototype.userCall = function() {
-    this.isUserCall = true;
-    var self = this;
-    return function(ret) {
-        self.isUserCall = false;
-        return ret;
-    };
-};
 
 HTTPParser.prototype.nextRequest = function() {
-    this.userCall()(this[kOnMessageComplete]());
+    this[kOnMessageComplete]();
     this.reinitialize(this.type);
 };
 
@@ -377,14 +353,7 @@ HTTPParser.prototype.HEADER = function() {
 
         info.shouldKeepAlive = this.shouldKeepAlive();
         //problem which also exists in original node: we should know skipBody before calling onHeadersComplete
-        var skipBody;
-        if (compatMode0_12) {
-            skipBody = this.userCall()(this[kOnHeadersComplete](info));
-        } else {
-            skipBody = this.userCall()(this[kOnHeadersComplete](info.versionMajor,
-                info.versionMinor, info.headers, info.method, info.url, info.statusCode,
-                info.statusMessage, info.upgrade, info.shouldKeepAlive));
-        }
+        var skipBody = this[kOnHeadersComplete](info);
         if (skipBody === 2) {
             this.nextRequest();
             return true;
@@ -418,7 +387,7 @@ HTTPParser.prototype.BODY_CHUNKHEAD = function() {
 
 HTTPParser.prototype.BODY_CHUNK = function() {
     var length = Math.min(this.end - this.offset, this.body_bytes);
-    this.userCall()(this[kOnBody](this.chunk, this.offset, length));
+    this[kOnBody](this.chunk, this.offset, length);
     this.offset += length;
     this.body_bytes -= length;
     if (!this.body_bytes) {
@@ -443,7 +412,7 @@ HTTPParser.prototype.BODY_CHUNKTRAILERS = function() {
         this.parseHeader(line, this.trailers);
     } else {
         if (this.trailers.length) {
-            this.userCall()(this[kOnHeaders](this.trailers, ''));
+            this[kOnHeaders](this.trailers, '');
         }
         this.nextRequest();
     }
@@ -451,13 +420,13 @@ HTTPParser.prototype.BODY_CHUNKTRAILERS = function() {
 
 HTTPParser.prototype.BODY_RAW = function() {
     var length = this.end - this.offset;
-    this.userCall()(this[kOnBody](this.chunk, this.offset, length));
+    this[kOnBody](this.chunk, this.offset, length);
     this.offset = this.end;
 };
 
 HTTPParser.prototype.BODY_SIZED = function() {
     var length = Math.min(this.end - this.offset, this.body_bytes);
-    this.userCall()(this[kOnBody](this.chunk, this.offset, length));
+    this[kOnBody](this.chunk, this.offset, length);
     this.offset += length;
     this.body_bytes -= length;
     if (!this.body_bytes) {
